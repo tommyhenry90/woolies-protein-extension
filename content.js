@@ -369,8 +369,25 @@ function fillBadge(badge, info) {
   badge.__tooltipContent = buildTooltip(info, density);
 }
 
-function buildTooltip(info, _density) {
+const VERDICTS = {
+  great: 'Excellent!',
+  good:  'Good!',
+  ok:    'OK.',
+  poor:  'Poor.',
+  bad:   'Bad.',
+  na:    'No data.',
+};
+
+function buildTooltip(info, density) {
   const lines = [];
+  const rating = ratingFor(density?.value ?? null);
+  const verdict = VERDICTS[rating];
+  if (density && Number.isFinite(density.value)) {
+    lines.push(`${verdict} ${formatGrams(density.value)}g of protein per 100 kcal`);
+  } else if (density) {
+    lines.push(`${verdict} ∞g of protein per 100 kcal (no caloric energy)`);
+  }
+
   if (info.proteinPer100g != null || info.energyKjPer100g != null) {
     const p = info.proteinPer100g != null ? `${info.proteinPer100g}g P` : '—';
     const e = info.energyKjPer100g != null

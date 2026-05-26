@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Woolies Protein Tags",
-  "description": "Shows protein content per 100g on every product tile across woolworths.com.au.",
-  "version": "0.2.0",
+  "description": "Rates every Woolworths product by protein per 100 kcal, with a colour-coded pill on each tile and a quick nutrition summary on hover.",
+  "version": "1.0.0",
   "permissions": ["storage"],
   "host_permissions": [
     "https://www.woolworths.com.au/*"

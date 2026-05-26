@@ -5,6 +5,14 @@
   display: none !important;
 }
 
+/* Hide ad cards interleaved with the product grid (Adobe Target / GAM
+ * sponsored content). The class hashes change between builds, but
+ * `ad-content_component_` is the stable CSS-module prefix. */
+[class*="ad-content_component_content-card"],
+[class*="ad-content_component_mbox-merch-card"] {
+  display: none !important;
+}
+
 /* Woolies Protein Tags — badge styles
  *
  * Single pill per tile showing protein (g) and energy (kJ), coloured by

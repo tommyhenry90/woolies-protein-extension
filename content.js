@@ -272,8 +272,8 @@ function ensureTooltip() {
     'pointer-events: none',
     'background: #1f1f1f',
     'color: #ffffff',
-    'font: 500 12px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    'padding: 10px 12px',
+    'font: 500 12px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    'padding: 12px 14px',
     'border-radius: 8px',
     'white-space: pre',
     'box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28)',
@@ -382,27 +382,39 @@ function buildTooltip(info, density) {
   const lines = [];
   const rating = ratingFor(density?.value ?? null);
   const verdict = VERDICTS[rating];
+
+  if (verdict) lines.push(verdict);
   if (density && Number.isFinite(density.value)) {
-    lines.push(`${verdict} ${formatGrams(density.value)}g of protein per 100 kcal`);
+    lines.push(`${formatGrams(density.value)} g of protein per 100 kcal`);
   } else if (density) {
-    lines.push(`${verdict} ∞g of protein per 100 kcal (no caloric energy)`);
+    lines.push('∞ g of protein per 100 kcal');
+    lines.push('(no caloric energy)');
   }
 
   if (info.proteinPer100g != null || info.energyKjPer100g != null) {
-    const p = info.proteinPer100g != null ? `${info.proteinPer100g}g P` : '—';
-    const e = info.energyKjPer100g != null
-      ? `${Math.round(info.energyKjPer100g / KJ_PER_KCAL)} kcal`
-      : '—';
-    lines.push(`Per 100g: ${p} · ${e}`);
+    lines.push('');
+    lines.push('Per 100g');
+    if (info.proteinPer100g != null) {
+      lines.push(`    ${info.proteinPer100g} g protein`);
+    }
+    if (info.energyKjPer100g != null) {
+      const kcal = Math.round(info.energyKjPer100g / KJ_PER_KCAL);
+      lines.push(`    ${kcal} kcal`);
+    }
   }
+
   if (info.proteinPerServing != null || info.energyKjPerServing != null) {
-    const p = info.proteinPerServing != null ? `${info.proteinPerServing}g P` : '—';
-    const e = info.energyKjPerServing != null
-      ? `${Math.round(info.energyKjPerServing / KJ_PER_KCAL)} kcal`
-      : '—';
-    const serve = info.servingSize ? `${info.servingSize} serve` : 'serve';
-    lines.push(`Per ${serve}: ${p} · ${e}`);
+    lines.push('');
+    lines.push(info.servingSize ? `Per serve (${info.servingSize})` : 'Per serve');
+    if (info.proteinPerServing != null) {
+      lines.push(`    ${info.proteinPerServing} g protein`);
+    }
+    if (info.energyKjPerServing != null) {
+      const kcal = Math.round(info.energyKjPerServing / KJ_PER_KCAL);
+      lines.push(`    ${kcal} kcal`);
+    }
   }
+
   return lines.join('\n');
 }
 

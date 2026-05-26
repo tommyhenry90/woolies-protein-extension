@@ -18,12 +18,6 @@ const KJ_PER_KCAL = 4.184;
 
 const nutritionByStockcode = new Map();
 
-// Stockcodes we've asked the background worker to fetch (so we don't loop).
-const fallbackRequested = new Set();
-// Stockcodes we've seen on a tile but don't yet have data for; checked
-// after a delay so the page's own fetch gets first crack.
-const pendingStockcodes = new Map(); // stockcode → first-seen ms
-
 // ─── Cache hydration ─────────────────────────────────────────────────
 (async function hydrate() {
   try {
@@ -78,8 +72,7 @@ function flushWrites() {
   const batch = pendingWrites;
   if (!Object.keys(batch).length) return;
   for (const k in batch) delete pendingWrites[k];
-  if (!extensionAlive()) return;
-  try { chrome.storage.local.set(batch); } catch (_) { /* ignored */ }
+  try { chrome?.storage?.local?.set(batch); } catch (_) { /* ignored */ }
 }
 
 // ─── Shadow-DOM-aware traversal ──────────────────────────────────────
@@ -490,7 +483,6 @@ function processDetailPage() {
   if (badge) {
     const info = nutritionByStockcode.get(stockcode);
     if (info) fillBadge(badge, info);
-    else if (!pendingStockcodes.has(stockcode)) pendingStockcodes.set(stockcode, Date.now());
     return;
   }
 
@@ -508,7 +500,6 @@ function processDetailPage() {
 
   const info = nutritionByStockcode.get(stockcode);
   if (info) fillBadge(badge, info);
-  else if (!pendingStockcodes.has(stockcode)) pendingStockcodes.set(stockcode, Date.now());
 }
 
 // ─── Main loop ───────────────────────────────────────────────────────
@@ -536,65 +527,11 @@ function processOnce() {
     if (!badge) continue;
 
     const info = nutritionByStockcode.get(stockcode);
-    if (info) {
-      fillBadge(badge, info);
-    } else {
-      if (!pendingStockcodes.has(stockcode)) pendingStockcodes.set(stockcode, Date.now());
-    }
-  }
-  considerFallbackFetch();
-  // If anything is still pending, make sure we run again past the fallback
-  // delay. Without this, a page that never fetches (SSR/cached) gets stuck
-  // in "loading" forever because nothing else triggers a reschedule.
-  if (pendingStockcodes.size > 0) {
-    setTimeout(scheduleProcess, FALLBACK_DELAY_MS + 50);
-  }
-}
-
-// If a stockcode has been visible for >500ms with no nutrition data arriving
-// from the page's own fetches, ask the background worker to fetch it directly.
-// (Lower than before — category pages often render tiles SSR and never fetch
-// product data client-side, so we'd otherwise stay grey forever.)
-const FALLBACK_DELAY_MS = 500;
-function extensionAlive() {
-  // chrome.runtime.id is undefined once the extension context is invalidated
-  // (e.g. user reloaded the extension while this tab was open).
-  try { return !!(chrome?.runtime?.id); } catch (_) { return false; }
-}
-function considerFallbackFetch() {
-  if (!extensionAlive()) return;
-  const now = Date.now();
-  for (const [sc, since] of pendingStockcodes) {
-    if (nutritionByStockcode.has(sc)) {
-      pendingStockcodes.delete(sc);
-      continue;
-    }
-    if (fallbackRequested.has(sc)) continue;
-    if (now - since < FALLBACK_DELAY_MS) continue;
-    fallbackRequested.add(sc);
-    try {
-      chrome.runtime.sendMessage({ type: 'wpt:fetchProduct', stockcode: sc }, (resp) => {
-        if (chrome.runtime?.lastError) return;
-        let nutrition;
-        if (resp?.ok && resp.nutrition) {
-          nutrition = resp.nutrition;
-        } else {
-          // Couldn't fetch — surface as "no data" so the pill stops loading.
-          nutrition = {
-            proteinPer100g: null, proteinPerServing: null,
-            energyKjPer100g: null, energyKjPerServing: null,
-            servingSize: null, noData: true,
-          };
-        }
-        nutritionByStockcode.set(sc, nutrition);
-        pendingWrites[STORAGE_PREFIX + sc] = nutrition;
-        if (writeTimer) clearTimeout(writeTimer);
-        writeTimer = setTimeout(flushWrites, 400);
-        scheduleProcess();
-      });
-    } catch (_) {
-      // Context invalidated mid-call — give up silently; the tab needs reload.
-    }
+    if (info) fillBadge(badge, info);
+    // No fallback needed — inject.js intercepts every Woolies API response
+    // (fetch + XHR) and scrapes inline JSON, so data arrives via postMessage
+    // whenever the page itself fetches it. Tiles with no data stay in the
+    // loading state briefly until the next page-level fetch lands.
   }
 }
 

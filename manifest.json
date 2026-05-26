@@ -4,9 +4,6 @@
   "description": "Rates every Woolworths product by protein per 100 kcal — colour-coded pill on each tile plus nutrition details on hover.",
   "version": "1.0.0",
   "permissions": ["storage"],
-  "host_permissions": [
-    "https://www.woolworths.com.au/*"
-  ],
   "action": {
     "default_title": "Woolies Protein Tags",
     "default_icon": {
@@ -19,9 +16,6 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },
-  "background": {
-    "service_worker": "background.js"
   },
   "content_scripts": [
     {

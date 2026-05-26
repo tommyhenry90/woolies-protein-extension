@@ -13,7 +13,6 @@ rm -f "$OUT"
 
 zip -qr "$OUT" \
   manifest.json \
-  background.js \
   content.js \
   inject.js \
   styles.css \

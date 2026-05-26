@@ -1,14 +1,15 @@
 name: Release
 
-# Push to the `deploy` branch to ship a new version. Workflow:
-#   1. Reads the version from manifest.json
-#   2. Builds the zip via pack.sh
-#   3. Uploads it to the Chrome Web Store as a draft
-#   4. Tags the commit v<version> and creates a GitHub Release with the zip
+# Push to the `deploy` branch and the workflow does the rest:
+#   1. Auto-bumps the patch version in manifest.json (if the current
+#      version already has a tag), commits the bump back to deploy.
+#   2. Builds the zip via pack.sh.
+#   3. Uploads it to the Chrome Web Store as a draft.
+#   4. Tags the commit v<version> and creates a GitHub Release.
 #
-# Your normal workflow: do work in `develop`, then when you're ready to
-# ship, bump the version with `./scripts/release.sh X.Y.Z` and either
-# merge develop → deploy or push deploy directly.
+# You can override the auto-bump by manually editing manifest.json on
+# develop before merging — if the version doesn't have an existing tag,
+# the workflow takes it as-is (good for major/minor bumps).
 
 on:
   push:
@@ -16,7 +17,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # for the GitHub Release + tag
+  contents: write
 
 jobs:
   release:
@@ -25,24 +26,33 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Read manifest version
+      - name: Determine release version
         id: version
         run: |
           set -euo pipefail
-          VERSION=$(grep -E '"version"' manifest.json | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Releasing v$VERSION"
-
-      - name: Skip if tag already exists
-        id: tagcheck
-        run: |
-          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-            echo "Tag v${{ steps.version.outputs.version }} already exists — bump manifest.json before pushing to deploy."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 1
+          CURRENT=$(grep -E '"version"' manifest.json | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+          if git rev-parse "v$CURRENT" >/dev/null 2>&1; then
+            # Tag exists — auto-bump the patch (last segment) component.
+            major=$(echo "$CURRENT" | cut -d. -f1)
+            minor=$(echo "$CURRENT" | cut -d. -f2)
+            patch=$(echo "$CURRENT" | cut -d. -f3)
+            patch=$((patch + 1))
+            NEXT="$major.$minor.$patch"
+            echo "Tag v$CURRENT already exists → bumping to v$NEXT"
+            sed -i.bak -E 's/("version": *)"[^"]+"/\1"'"$NEXT"'"/' manifest.json
+            rm manifest.json.bak
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add manifest.json
+            git commit -m "Bump to v$NEXT"
+            git push origin HEAD:deploy
+            echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+          else
+            echo "Using manifest version v$CURRENT (no bump needed)"
+            echo "version=$CURRENT" >> "$GITHUB_OUTPUT"
           fi
-          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Build extension zip
         run: |
@@ -63,7 +73,7 @@ jobs:
           # for review. Flip to true once you trust the flow.
           publish: false
 
-      - name: Create tag + GitHub Release
+      - name: Tag + GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}

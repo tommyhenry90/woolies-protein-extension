@@ -388,24 +388,44 @@ function formatEnergy(kj) {
 }
 
 // ─── Insertion ───────────────────────────────────────────────────────
+// Woolies' <wc-product-tile> shadow DOM exposes named slots — header-slot,
+// left-slot, right-slot, cta-slot-1/2/full, footer-slot. Projecting the
+// badge into header-slot is the cleanest place: it sits above the tile
+// content without disturbing the internal grid layout.
 function attachBadge(tile, stockcode) {
   if (tile.getAttribute(TILE_FLAG) === stockcode) {
-    return tile.querySelector(`[${BADGE_ATTR}="${stockcode}"]`);
+    return tile.querySelector(`:scope > [${BADGE_ATTR}="${stockcode}"]`)
+        || tile.querySelector(`[${BADGE_ATTR}="${stockcode}"]`);
   }
   tile.querySelectorAll(`[${BADGE_ATTR}]`).forEach((b) => b.remove());
 
   const badge = makeBadge(stockcode);
-  const root = tile.shadowRoot || tile;
-  const nameEl =
-    root.querySelector?.('[class*="product-tile-product-name"], [class*="productName"], h3, h2') ||
-    null;
-  if (nameEl && nameEl.parentElement) {
-    nameEl.parentElement.insertBefore(badge, nameEl);
+
+  const slotName = pickSlot(tile);
+  if (slotName) {
+    badge.setAttribute('slot', slotName);
+    tile.appendChild(badge);
   } else {
-    root.firstChild ? root.insertBefore(badge, root.firstChild) : root.appendChild(badge);
+    // Fallback for tiles without a shadow root / slot — insert near the name.
+    const root = tile.shadowRoot || tile;
+    const nameEl =
+      root.querySelector?.('[class*="product-tile-product-name"], [class*="productName"], h3, h2') ||
+      null;
+    if (nameEl && nameEl.parentElement) {
+      nameEl.parentElement.insertBefore(badge, nameEl);
+    } else {
+      root.firstChild ? root.insertBefore(badge, root.firstChild) : root.appendChild(badge);
+    }
   }
   tile.setAttribute(TILE_FLAG, stockcode);
   return badge;
+}
+
+function pickSlot(tile) {
+  const sr = tile.shadowRoot;
+  if (!sr) return null;
+  if (sr.querySelector('slot[name="header-slot"]')) return 'header-slot';
+  return null;
 }
 
 // ─── Product detail page (the main item has no /productdetails/ link) ─

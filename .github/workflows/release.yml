@@ -1,0 +1,53 @@
+name: Release
+
+# Push a tag like `v1.0.2` to build the zip, upload a new draft to the
+# Chrome Web Store, and attach the zip to a GitHub Release.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # for the GitHub Release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify manifest version matches tag
+        run: |
+          set -euo pipefail
+          MANIFEST_VERSION=$(grep -E '"version"' manifest.json | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "manifest: $MANIFEST_VERSION  tag: $TAG_VERSION"
+          if [ "$MANIFEST_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::manifest version ($MANIFEST_VERSION) doesn't match tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+      - name: Build extension zip
+        run: |
+          chmod +x pack.sh
+          ./pack.sh
+          mv dist/woolies-protein-tags-*.zip extension.zip
+          ls -lh extension.zip
+
+      - name: Upload to Chrome Web Store (as draft)
+        uses: mnao305/chrome-extension-upload@v5.0.0
+        with:
+          file-path: extension.zip
+          extension-id: ${{ secrets.CWS_EXTENSION_ID }}
+          client-id: ${{ secrets.CWS_CLIENT_ID }}
+          client-secret: ${{ secrets.CWS_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CWS_REFRESH_TOKEN }}
+          # publish=false keeps it as a draft so you can eyeball the listing
+          # before submitting for review. Flip to true once you trust the flow.
+          publish: false
+
+      - name: Attach zip to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: extension.zip
+          generate_release_notes: true

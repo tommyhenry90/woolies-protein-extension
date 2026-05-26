@@ -6,10 +6,16 @@
 }
 
 /* Hide ad cards interleaved with the product grid (Adobe Target / GAM
- * sponsored content). The class hashes change between builds, but
- * `ad-content_component_` is the stable CSS-module prefix. */
+ * sponsored content). The CSS-module hashes change between builds, but
+ * these prefixes / element shapes are stable:
+ *   - ad-content_component_… (legacy CSS-module classes)
+ *   - <shared-mbox> with the v2-tile class (Angular Adobe Target wrapper)
+ *   - any element whose class contains content-card-container-component-mbox
+ */
 [class*="ad-content_component_content-card"],
-[class*="ad-content_component_mbox-merch-card"] {
+[class*="ad-content_component_mbox-merch-card"],
+[class*="content-card-container-component-mbox"],
+shared-mbox.v2-tile {
   display: none !important;
 }
 

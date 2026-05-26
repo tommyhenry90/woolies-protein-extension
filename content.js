@@ -140,6 +140,16 @@ function getStockcodeFromLink(a) {
   return m ? m[1] : null;
 }
 
+function isHiddenTile(el) {
+  let n = el;
+  for (let i = 0; i < 4 && n; i++) {
+    // Inline style is the cheap, decisive check — Woolies sets display:none !important.
+    if (n.style && n.style.display === 'none') return true;
+    n = n.parentElement;
+  }
+  return false;
+}
+
 // Carousel libraries (Swiper, Slick, Splide, Glide, plus generic React ones)
 // duplicate slide elements for infinite scroll, which means the same product
 // appears twice in the DOM. Skip cloned slides so we don't badge them.
@@ -486,6 +496,10 @@ function processOnce() {
     if (seenStockcodes.has(stockcode)) continue;
     const tile = findTileForLink(a);
     if (!tile || seenTiles.has(tile)) continue;
+    // Woolies marks some tiles display:none !important (sponsored placeholders,
+    // already-swapped variants). Skip them — they're hidden and badging them
+    // would leak our slotted content into the layout if the host ever unhides.
+    if (isHiddenTile(tile)) continue;
     seenStockcodes.add(stockcode);
     seenTiles.add(tile);
 

@@ -1,3 +1,10 @@
+/* Collapse the grid cell when Woolies' ad-replacement logic has hidden
+ * its <wc-product-tile> inline. Without this rule the wrapper still
+ * occupies a column in `display: grid`, leaving visible empty cells. */
+.product-grid-v2--tile:has(> wc-product-tile[style*="display: none"]) {
+  display: none !important;
+}
+
 /* Woolies Protein Tags — badge styles
  *
  * Single pill per tile showing protein (g) and energy (kJ), coloured by

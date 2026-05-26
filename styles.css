@@ -1,0 +1,121 @@
+/* Woolies Protein Tags — badge styles
+ *
+ * Single pill per tile showing protein (g) and energy (kJ), coloured by
+ * the (protein × 10) / kcal rule:
+ *
+ *   na    grey    no nutrition info published
+ *   bad   red     ratio < 0.3
+ *   poor  orange  0.3 ≤ ratio < 0.6
+ *   ok    yellow  0.6 ≤ ratio < 1.0   (a bit below the rule)
+ *   good  light gn 1.0 ≤ ratio < 2.0  (passes)
+ *   great deep gn 2.0 ≤ ratio          (excellent)
+ */
+
+.wpt-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: 0.01em;
+  border: 1px solid transparent;
+  width: fit-content;
+  max-width: 100%;
+  white-space: nowrap;
+  box-sizing: border-box;
+  cursor: help;
+  transition: transform 80ms ease;
+}
+
+.wpt-badge:hover {
+  transform: translateY(-1px);
+}
+
+.wpt-badge .wpt-metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.wpt-badge .wpt-metric-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.wpt-badge .wpt-metric-unit {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.wpt-badge .wpt-sep {
+  opacity: 0.4;
+  font-weight: 400;
+}
+
+/* Loading */
+.wpt-badge.wpt-loading {
+  opacity: 0.6;
+}
+.wpt-badge.wpt-loading .wpt-metric-value {
+  font-weight: 400;
+}
+
+/* Per-serving (no per-100g published) — slight italic + asterisk via ::after */
+.wpt-badge.wpt-per-serve::after {
+  content: " /sv";
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.55;
+  margin-left: 1px;
+}
+
+/* ─── Rating colours ────────────────────────────────────────────────
+ * Background, text, and border picked so each tier is unambiguous at
+ * a glance on either the white tile background or a tinted price strip.
+ */
+
+.wpt-badge.wpt-rating-na {
+  background: #eceff1;
+  color: #5f6368;
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+.wpt-badge.wpt-rating-bad {
+  background: #fce4e4;
+  color: #8b1a1a;
+  border-color: rgba(139, 26, 26, 0.18);
+}
+
+.wpt-badge.wpt-rating-poor {
+  background: #ffe6cc;
+  color: #8a4500;
+  border-color: rgba(138, 69, 0, 0.18);
+}
+
+.wpt-badge.wpt-rating-ok {
+  background: #fff4c2;
+  color: #6b5400;
+  border-color: rgba(107, 84, 0, 0.18);
+}
+
+.wpt-badge.wpt-rating-good {
+  background: #d7f0d8;
+  color: #1d6f2b;
+  border-color: rgba(29, 111, 43, 0.22);
+}
+
+.wpt-badge.wpt-rating-great {
+  background: #137333;
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 0 0 1px rgba(19, 115, 51, 0.25);
+}
+
+.wpt-badge.wpt-rating-great .wpt-metric-unit,
+.wpt-badge.wpt-rating-great .wpt-sep {
+  color: #d7f3df;
+  opacity: 0.85;
+}

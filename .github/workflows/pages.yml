@@ -5,7 +5,7 @@ name: Pages
 
 on:
   push:
-    branches: [main]
+    branches: [deploy]
     paths: ['docs/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 

@@ -1,31 +1,48 @@
 name: Release
 
-# Push a tag like `v1.0.2` to build the zip, upload a new draft to the
-# Chrome Web Store, and attach the zip to a GitHub Release.
+# Push to the `deploy` branch to ship a new version. Workflow:
+#   1. Reads the version from manifest.json
+#   2. Builds the zip via pack.sh
+#   3. Uploads it to the Chrome Web Store as a draft
+#   4. Tags the commit v<version> and creates a GitHub Release with the zip
+#
+# Your normal workflow: do work in `develop`, then when you're ready to
+# ship, bump the version with `./scripts/release.sh X.Y.Z` and either
+# merge develop → deploy or push deploy directly.
 
 on:
   push:
-    tags: ['v*']
+    branches: [deploy]
+  workflow_dispatch:
 
 permissions:
-  contents: write   # for the GitHub Release
+  contents: write   # for the GitHub Release + tag
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Verify manifest version matches tag
+      - name: Read manifest version
+        id: version
         run: |
           set -euo pipefail
-          MANIFEST_VERSION=$(grep -E '"version"' manifest.json | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          echo "manifest: $MANIFEST_VERSION  tag: $TAG_VERSION"
-          if [ "$MANIFEST_VERSION" != "$TAG_VERSION" ]; then
-            echo "::error::manifest version ($MANIFEST_VERSION) doesn't match tag ($TAG_VERSION)"
+          VERSION=$(grep -E '"version"' manifest.json | head -1 | sed -E 's/.*"version": *"([^"]+)".*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$VERSION"
+
+      - name: Skip if tag already exists
+        id: tagcheck
+        run: |
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag v${{ steps.version.outputs.version }} already exists — bump manifest.json before pushing to deploy."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 1
           fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Build extension zip
         run: |
@@ -42,12 +59,14 @@ jobs:
           client-id: ${{ secrets.CWS_CLIENT_ID }}
           client-secret: ${{ secrets.CWS_CLIENT_SECRET }}
           refresh-token: ${{ secrets.CWS_REFRESH_TOKEN }}
-          # publish=false keeps it as a draft so you can eyeball the listing
-          # before submitting for review. Flip to true once you trust the flow.
+          # Keep as draft so you can eyeball the listing before submitting
+          # for review. Flip to true once you trust the flow.
           publish: false
 
-      - name: Attach zip to GitHub Release
+      - name: Create tag + GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
           files: extension.zip
           generate_release_notes: true

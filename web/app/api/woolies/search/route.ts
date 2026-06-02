@@ -67,7 +67,8 @@ export async function POST(req: Request) {
   }
 
   const pageNumber = Math.max(1, Math.floor(body.page ?? 1));
-  const pageSize = Math.min(60, Math.max(1, Math.floor(body.pageSize ?? 60)));
+  // Woolies caps PageSize at 36 and returns HTTP 400 otherwise.
+  const pageSize = Math.min(36, Math.max(1, Math.floor(body.pageSize ?? 36)));
   const payload = {
     Filters: [],
     IsSpecial: false,

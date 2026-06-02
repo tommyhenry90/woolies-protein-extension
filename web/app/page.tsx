@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { hasWooliesCookie, wooliesSearch, type WooliesProduct } from "@/lib/woolies";
+import { wooliesSearch, type WooliesProduct } from "@/lib/woolies";
 import { ProductCard } from "@/components/ProductCard";
 import { SearchBox } from "@/components/SearchBox";
 import { computeProteinPer100kcal } from "@/lib/rating";
@@ -57,18 +56,7 @@ export default function Home() {
   const [totalCount, setTotalCount] = useState(0);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [needsAuth, setNeedsAuth] = useState(false);
-  const [connected, setConnected] = useState(false);
-  const [hasSharedSession, setHasSharedSession] = useState<boolean | null>(null);
   const [sort, setSort] = useState<SortKey>("protein-density");
-
-  useEffect(() => {
-    setConnected(hasWooliesCookie());
-    fetch("/api/woolies/status")
-      .then((r) => r.json())
-      .then((j) => setHasSharedSession(!!j.hasSharedSession))
-      .catch(() => setHasSharedSession(false));
-  }, []);
 
   const sortedProducts = useMemo(
     () => (products ? sortProducts(products, sort) : null),
@@ -78,7 +66,6 @@ export default function Home() {
   function search(term: string, pageNumber = 1) {
     startTransition(async () => {
       setError(null);
-      setNeedsAuth(false);
       if (pageNumber === 1) {
         setSubmittedTerm(term);
         setProducts(null);
@@ -91,8 +78,6 @@ export default function Home() {
         setPage(reply.page ?? pageNumber);
         setHasMore(!!reply.hasMore);
         setTotalCount(reply.totalCount ?? reply.products.length);
-      } else if (reply.needsAuth) {
-        setNeedsAuth(true);
       } else {
         setError(reply.error || (reply.blocked ? "Blocked by Woolworths." : "Search failed."));
         setProducts([]);
@@ -101,30 +86,25 @@ export default function Home() {
   }
 
   return (
-    <main className="max-w-6xl mx-auto px-6 py-10">
-      <header className="mb-8 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Image
-            src="/logo-mark.png"
-            alt="Gains Grocer logo"
-            width={56}
-            height={56}
-            priority
-            className="flex-shrink-0"
-          />
-          <div>
-            <h1 className="text-3xl font-bold leading-tight flex items-baseline gap-2">
-              <span>Gains</span>
-              <span className="text-green-700">Grocer</span>
-            </h1>
-            <p className="text-sm text-gray-500">
-              The cheapest protein at Woolworths, ranked by what it costs.
-            </p>
-          </div>
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+      <header className="mb-6 flex items-center gap-3">
+        <Image
+          src="/logo-mark.png"
+          alt="Gains Grocer logo"
+          width={48}
+          height={48}
+          priority
+          className="flex-shrink-0"
+        />
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold leading-tight flex items-baseline gap-1.5">
+            <span>Gains</span>
+            <span className="text-green-700">Grocer</span>
+          </h1>
+          <p className="hidden sm:block text-sm text-gray-500">
+            The cheapest protein at Woolworths, ranked by what it costs.
+          </p>
         </div>
-        <Link href="/settings" className="text-sm text-gray-600 hover:text-gray-900 underline">
-          Settings
-        </Link>
       </header>
 
       <div className="mb-4">
@@ -156,22 +136,7 @@ export default function Home() {
         </div>
       )}
 
-      {!connected && hasSharedSession === false && (
-        <div className="mb-6 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm">
-          Couldn&apos;t reach Woolworths anonymously — your search may need a
-          personal session.{" "}
-          <Link href="/settings" className="underline font-medium">Connect one</Link>.
-        </div>
-      )}
-
-      {needsAuth && (
-        <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-900 text-sm">
-          Your Woolies session expired or is missing.{" "}
-          <Link href="/settings" className="underline font-medium">Reconnect</Link>.
-        </div>
-      )}
-
-      {error && !needsAuth && (
+      {error && (
         <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-900 text-sm">
           {error}
         </div>
@@ -198,13 +163,13 @@ export default function Home() {
         </>
       )}
 
-      {sortedProducts && sortedProducts.length === 0 && !error && !needsAuth && (
+      {sortedProducts && sortedProducts.length === 0 && !error && (
         <div className="text-center text-gray-500 py-12">
           No products found for &ldquo;{submittedTerm}&rdquo;.
         </div>
       )}
 
-      {!sortedProducts && !pending && !needsAuth && !error && (
+      {!sortedProducts && !pending && !error && (
         <div className="text-center text-gray-400 py-16 text-sm">
           Try <em>chicken breast</em>, <em>greek yoghurt</em>, <em>tuna</em>, <em>protein bar</em>…
         </div>

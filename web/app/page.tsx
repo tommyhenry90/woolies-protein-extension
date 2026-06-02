@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { wooliesSearch, type WooliesProduct } from "@/lib/woolies";
 import { ProductCard } from "@/components/ProductCard";
@@ -22,6 +22,12 @@ const SORT_LABELS: Record<SortKey, string> = {
   "cheapest-per-100g-protein": "Cheapest protein",
   "cheapest-per-kg": "Cheapest per kg",
 };
+
+// Hard cap on background-loaded pages. 6 × 36 = 216 products is plenty
+// for a sort to surface the genuine winners; further pages are usually
+// tail relevance and not worth the round-trips.
+const MAX_PAGES = 6;
+const CONCURRENCY = 3;
 
 function sortProducts(products: WooliesProduct[], key: SortKey): WooliesProduct[] {
   if (key === "relevance") return products;
@@ -57,39 +63,67 @@ function scoreFor(p: WooliesProduct, key: SortKey): number | null {
 export default function Home() {
   const [submittedTerm, setSubmittedTerm] = useState("");
   const [products, setProducts] = useState<WooliesProduct[] | null>(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
-  const [pending, startTransition] = useTransition();
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("protein-density");
+
+  // Bumped per search; in-flight handlers compare against the ref and bail
+  // out if the user has typed a new query in the meantime.
+  const searchIdRef = useRef(0);
 
   const sortedProducts = useMemo(
     () => (products ? sortProducts(products, sort) : null),
     [products, sort],
   );
 
-  function search(term: string, pageNumber = 1) {
-    startTransition(async () => {
-      setError(null);
-      if (pageNumber === 1) {
-        setSubmittedTerm(term);
-        setProducts(null);
+  async function search(term: string) {
+    const myId = ++searchIdRef.current;
+    setSubmittedTerm(term);
+    setProducts(null);
+    setTotalCount(0);
+    setError(null);
+    setLoadingMore(false);
+    setLoading(true);
+
+    const first = await wooliesSearch(term, 1);
+    if (searchIdRef.current !== myId) return; // user moved on
+
+    if (!first.ok) {
+      setLoading(false);
+      setError(first.error || (first.blocked ? "Blocked by Woolworths." : "Search failed."));
+      setProducts([]);
+      return;
+    }
+    setProducts(first.products);
+    setTotalCount(first.totalCount ?? first.products.length);
+    setLoading(false);
+
+    const pageSize = first.pageSize ?? 36;
+    const total = first.totalCount ?? 0;
+    const allPages = Math.ceil(total / pageSize);
+    const wantedPages = Math.min(allPages, MAX_PAGES);
+    if (wantedPages <= 1) return;
+
+    // Background-load pages 2..wantedPages so the full sort works.
+    setLoadingMore(true);
+    const remaining = Array.from({ length: wantedPages - 1 }, (_, i) => i + 2);
+    for (let i = 0; i < remaining.length; i += CONCURRENCY) {
+      const batch = remaining.slice(i, i + CONCURRENCY);
+      const replies = await Promise.all(batch.map((p) => wooliesSearch(term, p)));
+      if (searchIdRef.current !== myId) return;
+      const newOnes = replies.flatMap((r) => (r.ok ? r.products : []));
+      if (newOnes.length) {
+        setProducts((prev) => mergeUnique(prev || [], newOnes));
       }
-      const reply = await wooliesSearch(term, pageNumber);
-      if (reply.ok) {
-        setProducts((prev) =>
-          pageNumber === 1 ? reply.products : [...(prev || []), ...reply.products],
-        );
-        setPage(reply.page ?? pageNumber);
-        setHasMore(!!reply.hasMore);
-        setTotalCount(reply.totalCount ?? reply.products.length);
-      } else {
-        setError(reply.error || (reply.blocked ? "Blocked by Woolworths." : "Search failed."));
-        setProducts([]);
-      }
-    });
+    }
+    if (searchIdRef.current === myId) setLoadingMore(false);
   }
+
+  const loadedCount = sortedProducts?.length ?? 0;
+  const cap = Math.min(totalCount, MAX_PAGES * 36);
+  const remainingToLoad = Math.max(0, cap - loadedCount);
 
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
@@ -114,7 +148,7 @@ export default function Home() {
       </header>
 
       <div className="mb-4">
-        <SearchBox pending={pending} onSubmit={(t) => search(t, 1)} />
+        <SearchBox pending={loading} onSubmit={(t) => search(t)} />
       </div>
 
       {sortedProducts && sortedProducts.length > 0 && (
@@ -135,8 +169,13 @@ export default function Home() {
             </button>
           ))}
           {totalCount > 0 && (
-            <span className="ml-auto text-xs text-gray-500">
-              Showing {sortedProducts.length} of {totalCount}
+            <span className="ml-auto text-xs text-gray-500 flex items-center gap-1.5">
+              {loadingMore && (
+                <span className="inline-block h-2 w-2 rounded-full bg-green-600 animate-pulse" />
+              )}
+              {loadingMore
+                ? `Loading ${remainingToLoad} more…`
+                : `${loadedCount} of ${totalCount > cap ? `${cap}+` : totalCount}`}
             </span>
           )}
         </div>
@@ -149,24 +188,11 @@ export default function Home() {
       )}
 
       {sortedProducts && sortedProducts.length > 0 && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {sortedProducts.map((p) => (
-              <ProductCard key={String(p.stockcode)} product={p} />
-            ))}
-          </div>
-          {hasMore && (
-            <div className="mt-8 flex justify-center">
-              <button
-                onClick={() => search(submittedTerm, page + 1)}
-                disabled={pending}
-                className="px-5 py-2.5 rounded-lg bg-white border border-gray-300 text-sm font-medium hover:border-gray-400 disabled:opacity-50"
-              >
-                {pending ? "Loading…" : `Load more (${Math.max(0, totalCount - sortedProducts.length)} remaining)`}
-              </button>
-            </div>
-          )}
-        </>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {sortedProducts.map((p) => (
+            <ProductCard key={String(p.stockcode)} product={p} />
+          ))}
+        </div>
       )}
 
       {sortedProducts && sortedProducts.length === 0 && !error && (
@@ -175,11 +201,23 @@ export default function Home() {
         </div>
       )}
 
-      {!sortedProducts && !pending && !error && (
+      {!sortedProducts && !loading && !error && (
         <div className="text-center text-gray-400 py-16 text-sm">
           Try <em>chicken breast</em>, <em>greek yoghurt</em>, <em>tuna</em>, <em>protein bar</em>…
         </div>
       )}
     </main>
   );
+}
+
+function mergeUnique(existing: WooliesProduct[], incoming: WooliesProduct[]): WooliesProduct[] {
+  const seen = new Set(existing.map((p) => String(p.stockcode)));
+  const merged = [...existing];
+  for (const p of incoming) {
+    const k = String(p.stockcode);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    merged.push(p);
+  }
+  return merged;
 }

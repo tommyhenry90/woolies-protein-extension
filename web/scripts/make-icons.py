@@ -112,7 +112,12 @@ def _load_font(size: int, bold: bool = False):
 
 def main():
     source = Image.open(SRC).convert("RGBA")
-    cleaned = autocrop(remove_cream_background(source))
+    # The current logo-source.png is already a transparent PNG; only call
+    # remove_cream_background() if a cream surface is detected at a corner.
+    corner = source.getpixel((0, 0))
+    if isinstance(corner, tuple) and len(corner) >= 4 and corner[3] > 0:
+        source = remove_cream_background(source)
+    cleaned = autocrop(source)
 
     # 1) Next favicon convention — app/icon.png, transparent background.
     make_square_transparent(cleaned, 512).save(os.path.join(APP, "icon.png"))

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { hasWooliesCookie, wooliesSearch, type WooliesProduct } from "@/lib/woolies";
 import { ProductCard } from "@/components/ProductCard";
+import { SearchBox } from "@/components/SearchBox";
 import { computeProteinPer100kcal } from "@/lib/rating";
 import { pricePer100gProtein, pricePerKg } from "@/lib/pricing";
 
@@ -22,13 +23,11 @@ const SORT_LABELS: Record<SortKey, string> = {
 
 function sortProducts(products: WooliesProduct[], key: SortKey): WooliesProduct[] {
   if (key === "relevance") return products;
-  // Stable copy + comparator. Items with no value sink to the bottom.
   const tagged = products.map((p, i) => ({ p, i, v: scoreFor(p, key) }));
   tagged.sort((a, b) => {
     if (a.v == null && b.v == null) return a.i - b.i;
     if (a.v == null) return 1;
     if (b.v == null) return -1;
-    // protein-density: HIGHER is better. price-based: LOWER is better.
     return key === "protein-density" ? b.v - a.v : a.v - b.v;
   });
   return tagged.map((t) => t.p);
@@ -50,8 +49,11 @@ function scoreFor(p: WooliesProduct, key: SortKey): number | null {
 }
 
 export default function Home() {
-  const [term, setTerm] = useState("");
+  const [submittedTerm, setSubmittedTerm] = useState("");
   const [products, setProducts] = useState<WooliesProduct[] | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [needsAuth, setNeedsAuth] = useState(false);
@@ -72,15 +74,22 @@ export default function Home() {
     [products, sort],
   );
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!term.trim()) return;
+  function search(term: string, pageNumber = 1) {
     startTransition(async () => {
       setError(null);
       setNeedsAuth(false);
-      const reply = await wooliesSearch(term);
+      if (pageNumber === 1) {
+        setSubmittedTerm(term);
+        setProducts(null);
+      }
+      const reply = await wooliesSearch(term, pageNumber);
       if (reply.ok) {
-        setProducts(reply.products);
+        setProducts((prev) =>
+          pageNumber === 1 ? reply.products : [...(prev || []), ...reply.products],
+        );
+        setPage(reply.page ?? pageNumber);
+        setHasMore(!!reply.hasMore);
+        setTotalCount(reply.totalCount ?? reply.products.length);
       } else if (reply.needsAuth) {
         setNeedsAuth(true);
       } else {
@@ -107,26 +116,12 @@ export default function Home() {
         </Link>
       </header>
 
-      <form onSubmit={onSubmit} className="flex gap-2 mb-4">
-        <input
-          type="search"
-          autoFocus
-          value={term}
-          onChange={(e) => setTerm(e.target.value)}
-          placeholder="Search for chicken breast, greek yoghurt, oats…"
-          className="flex-1 px-4 py-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-green-600"
-        />
-        <button
-          type="submit"
-          disabled={pending || !term.trim()}
-          className="px-6 py-3 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-        >
-          {pending ? "Searching…" : "Search"}
-        </button>
-      </form>
+      <div className="mb-4">
+        <SearchBox pending={pending} onSubmit={(t) => search(t, 1)} />
+      </div>
 
       {sortedProducts && sortedProducts.length > 0 && (
-        <div className="mb-6 flex items-center gap-2 flex-wrap">
+        <div className="mb-4 flex items-center gap-2 flex-wrap">
           <span className="text-xs text-gray-500 uppercase tracking-wider">Sort</span>
           {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
             <button
@@ -142,6 +137,11 @@ export default function Home() {
               {SORT_LABELS[k]}
             </button>
           ))}
+          {totalCount > 0 && (
+            <span className="ml-auto text-xs text-gray-500">
+              Showing {sortedProducts.length} of {totalCount}
+            </span>
+          )}
         </div>
       )}
 
@@ -166,16 +166,29 @@ export default function Home() {
       )}
 
       {sortedProducts && sortedProducts.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {sortedProducts.map((p) => (
-            <ProductCard key={String(p.stockcode)} product={p} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {sortedProducts.map((p) => (
+              <ProductCard key={String(p.stockcode)} product={p} />
+            ))}
+          </div>
+          {hasMore && (
+            <div className="mt-8 flex justify-center">
+              <button
+                onClick={() => search(submittedTerm, page + 1)}
+                disabled={pending}
+                className="px-5 py-2.5 rounded-lg bg-white border border-gray-300 text-sm font-medium hover:border-gray-400 disabled:opacity-50"
+              >
+                {pending ? "Loading…" : `Load more (${Math.max(0, totalCount - sortedProducts.length)} remaining)`}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {sortedProducts && sortedProducts.length === 0 && !error && !needsAuth && (
         <div className="text-center text-gray-500 py-12">
-          No products found for &ldquo;{term}&rdquo;.
+          No products found for &ldquo;{submittedTerm}&rdquo;.
         </div>
       )}
 

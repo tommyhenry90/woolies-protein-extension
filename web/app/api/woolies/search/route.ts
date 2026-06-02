@@ -13,7 +13,7 @@ export const preferredRegion = "syd1";
 
 const WOOLIES_SEARCH = "https://www.woolworths.com.au/apis/ui/Search/products";
 
-type SearchBody = { term?: string; cookie?: string };
+type SearchBody = { term?: string; cookie?: string; page?: number; pageSize?: number };
 
 type WooliesApiProduct = {
   Stockcode?: number | string;
@@ -68,12 +68,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Couldn't establish a Woolies session", needsAuth: true }, { status: 502 });
   }
 
+  const pageNumber = Math.max(1, Math.floor(body.page ?? 1));
+  const pageSize = Math.min(60, Math.max(1, Math.floor(body.pageSize ?? 60)));
   const payload = {
     Filters: [],
     IsSpecial: false,
     Location: `/shop/search/products?searchTerm=${encodeURIComponent(term)}`,
-    PageNumber: 1,
-    PageSize: 24,
+    PageNumber: pageNumber,
+    PageSize: pageSize,
     SearchTerm: term,
     SortType: "TraderRelevance",
     IsHideEverydayMarketProducts: false,
@@ -139,7 +141,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Non-JSON response", products: [] }, { status: 502 });
     }
 
-    const data = await res.json() as { Products?: WooliesApiProduct[] };
+    const data = await res.json() as { Products?: WooliesApiProduct[]; SearchResultsCount?: number };
+    const totalCount = data.SearchResultsCount ?? 0;
     const groups = data.Products || [];
     const flat: WooliesApiProduct[] = groups.flatMap(g => Array.isArray(g.Products) ? g.Products : [g]);
 
@@ -160,7 +163,15 @@ export async function POST(req: Request) {
       };
     }).filter(Boolean);
 
-    return NextResponse.json({ ok: true, products, cookieSource });
+    return NextResponse.json({
+      ok: true,
+      products,
+      page: pageNumber,
+      pageSize,
+      totalCount,
+      hasMore: pageNumber * pageSize < totalCount,
+      cookieSource,
+    });
   } catch (e) {
     const aborted = e instanceof Error && e.name === "AbortError";
     const msg = e instanceof Error ? e.message : "Unknown error";

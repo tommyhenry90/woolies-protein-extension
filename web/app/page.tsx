@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { hasWooliesCookie, wooliesSearch, type WooliesProduct } from "@/lib/woolies";
 import { ProductCard } from "@/components/ProductCard";
@@ -101,15 +102,25 @@ export default function Home() {
 
   return (
     <main className="max-w-6xl mx-auto px-6 py-10">
-      <header className="mb-8 flex items-baseline justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold flex items-baseline gap-2">
-            <span>Gains</span>
-            <span className="text-green-700">Grocer</span>
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            The cheapest protein at Woolworths, ranked by what it costs.
-          </p>
+      <header className="mb-8 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Image
+            src="/logo-mark.png"
+            alt="Gains Grocer logo"
+            width={56}
+            height={56}
+            priority
+            className="flex-shrink-0"
+          />
+          <div>
+            <h1 className="text-3xl font-bold leading-tight flex items-baseline gap-2">
+              <span>Gains</span>
+              <span className="text-green-700">Grocer</span>
+            </h1>
+            <p className="text-sm text-gray-500">
+              The cheapest protein at Woolworths, ranked by what it costs.
+            </p>
+          </div>
         </div>
         <Link href="/settings" className="text-sm text-gray-600 hover:text-gray-900 underline">
           Settings

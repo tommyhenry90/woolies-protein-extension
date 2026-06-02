@@ -11,3 +11,4 @@ web/preview-*.png
 web/.open-next/
 web/cloudflare-env.d.ts
 web/.wrangler/
+web/logo-source.png

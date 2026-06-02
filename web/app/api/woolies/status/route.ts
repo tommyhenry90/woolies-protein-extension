@@ -1,6 +1,7 @@
-// GET /api/woolies/status — reports whether the server has a shared Woolies
-// cookie configured (WOOLIES_COOKIE env var). The UI uses this to decide
-// whether to show the "Connect your Woolies session" prompt.
+// GET /api/woolies/status — reports whether the server can search without
+// the visitor connecting their own Woolies session. Always true now that
+// the proxy harvests anonymous Akamai cookies from the homepage on demand;
+// kept as an endpoint so the UI can react if that path ever breaks.
 
 import { NextResponse } from "next/server";
 
@@ -8,6 +9,7 @@ export const runtime = "edge";
 
 export async function GET() {
   return NextResponse.json({
-    hasSharedSession: !!(process.env.WOOLIES_COOKIE && process.env.WOOLIES_COOKIE.length > 0),
+    hasSharedSession: true,
+    hasEnvCookie: !!(process.env.WOOLIES_COOKIE && process.env.WOOLIES_COOKIE.length > 0),
   });
 }

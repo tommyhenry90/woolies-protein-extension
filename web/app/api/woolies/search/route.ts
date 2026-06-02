@@ -6,6 +6,7 @@
 
 import { NextResponse } from "next/server";
 import { extractNutrition, type Nutrition } from "@/lib/rating";
+import { getAnonymousWooliesCookies, invalidateAnonymousCookies } from "@/lib/anon-cookies";
 
 export const runtime = "edge";
 export const preferredRegion = "syd1";
@@ -46,14 +47,26 @@ export async function POST(req: Request) {
   }
 
   const term = (body.term || "").trim();
-  // Prefer the user-supplied cookie (their own Woolies session); fall back to
-  // the shared cookie set on the server (WOOLIES_COOKIE env var) so visitors
-  // can search without connecting their own account.
-  const cookie = (body.cookie && body.cookie.length > 0)
-    ? body.cookie
-    : (process.env.WOOLIES_COOKIE || "");
   if (!term) return NextResponse.json({ ok: false, error: "Missing term" }, { status: 400 });
-  if (!cookie) return NextResponse.json({ ok: false, error: "No Woolies session", needsAuth: true }, { status: 401 });
+
+  // Cookie priority:
+  //   1. User-supplied (bookmarklet) — their personalised session
+  //   2. WOOLIES_COOKIE env var       — preconfigured shared session (optional)
+  //   3. Anonymous Akamai cookies harvested from a homepage GET — works for everyone
+  let cookie = "";
+  let cookieSource: "user" | "env" | "anon" = "anon";
+  if (body.cookie && body.cookie.length > 0) {
+    cookie = body.cookie;
+    cookieSource = "user";
+  } else if (process.env.WOOLIES_COOKIE && process.env.WOOLIES_COOKIE.length > 0) {
+    cookie = process.env.WOOLIES_COOKIE;
+    cookieSource = "env";
+  } else {
+    cookie = await getAnonymousWooliesCookies();
+  }
+  if (!cookie) {
+    return NextResponse.json({ ok: false, error: "Couldn't establish a Woolies session", needsAuth: true }, { status: 502 });
+  }
 
   const payload = {
     Filters: [],
@@ -75,24 +88,39 @@ export async function POST(req: Request) {
   const ua = req.headers.get("user-agent")
     || "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36";
 
-  const ctrl = new AbortController();
-  const timeoutId = setTimeout(() => ctrl.abort(), 12000);
+  async function callWoolies(cookieValue: string): Promise<Response> {
+    const ctrl = new AbortController();
+    const timeoutId = setTimeout(() => ctrl.abort(), 12000);
+    try {
+      return await fetch(WOOLIES_SEARCH, {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: {
+          Accept: "application/json, text/plain, */*",
+          "Content-Type": "application/json",
+          Origin: "https://www.woolworths.com.au",
+          Referer: "https://www.woolworths.com.au/shop/search/products?searchTerm=" + encodeURIComponent(term),
+          "User-Agent": ua,
+          Cookie: cookieValue,
+        },
+        body: JSON.stringify(payload),
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
 
   try {
-    const res = await fetch(WOOLIES_SEARCH, {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: {
-        Accept: "application/json, text/plain, */*",
-        "Content-Type": "application/json",
-        Origin: "https://www.woolworths.com.au",
-        Referer: "https://www.woolworths.com.au/shop/search/products?searchTerm=" + encodeURIComponent(term),
-        "User-Agent": ua,
-        Cookie: cookie,
-      },
-      body: JSON.stringify(payload),
-    });
-    clearTimeout(timeoutId);
+    let res = await callWoolies(cookie);
+
+    // If Akamai dropped us on the first try AND we were using anon cookies,
+    // re-harvest the homepage once and retry. Stale anon cookies are the
+    // most common cause of a 403 here.
+    if (!res.ok && cookieSource === "anon" && (res.status === 403 || res.status === 401)) {
+      invalidateAnonymousCookies();
+      const fresh = await getAnonymousWooliesCookies();
+      if (fresh) res = await callWoolies(fresh);
+    }
 
     const contentType = res.headers.get("content-type") || "";
     if (!res.ok) {
@@ -132,9 +160,8 @@ export async function POST(req: Request) {
       };
     }).filter(Boolean);
 
-    return NextResponse.json({ ok: true, products });
+    return NextResponse.json({ ok: true, products, cookieSource });
   } catch (e) {
-    clearTimeout(timeoutId);
     const aborted = e instanceof Error && e.name === "AbortError";
     const msg = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({

@@ -26,22 +26,30 @@ DARK_GREEN = (45, 95, 25)
 WHITE = (255, 255, 255)
 
 
-def remove_cream_background(img: Image.Image, tolerance: int = 22) -> Image.Image:
-    """Replace ALL near-cream pixels with transparent. The source artwork
-    bakes a cream rounded-square *into* the design, so flood-fill from the
-    corners isn't enough — we mask by colour distance globally."""
+def remove_cream_background(img: Image.Image, soft_dist: float = 90.0) -> Image.Image:
+    """Map cream-similar pixels to transparent with a soft alpha falloff so
+    the anti-aliased halo around the artwork fades cleanly to nothing.
+
+    For each pixel we compute Euclidean RGB distance to the cream brand
+    colour. Pixels at distance 0 (pure cream) → alpha 0. Pixels at
+    `soft_dist` or further → original alpha. In between we scale alpha
+    linearly, which kills the halo without nibbling the green outlines."""
     img = img.convert("RGBA")
     px = img.load()
     w, h = img.size
+    cr, cg, cb = CREAM
     for y in range(h):
         for x in range(w):
             r, g, b, a = px[x, y]
-            if (
-                abs(r - CREAM[0]) <= tolerance
-                and abs(g - CREAM[1]) <= tolerance
-                and abs(b - CREAM[2]) <= tolerance
-            ):
+            dr, dg, db = r - cr, g - cg, b - cb
+            dist = (dr * dr + dg * dg + db * db) ** 0.5
+            if dist >= soft_dist:
+                continue
+            new_alpha = int(round(a * (dist / soft_dist)))
+            if new_alpha <= 2:
                 px[x, y] = (0, 0, 0, 0)
+            else:
+                px[x, y] = (r, g, b, new_alpha)
     return img
 
 

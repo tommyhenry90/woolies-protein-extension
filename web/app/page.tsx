@@ -5,18 +5,20 @@ import Image from "next/image";
 import { wooliesSearch, type WooliesProduct } from "@/lib/woolies";
 import { ProductCard } from "@/components/ProductCard";
 import { SearchBox } from "@/components/SearchBox";
-import { computeProteinPer100kcal } from "@/lib/rating";
+import { computeProteinPer100kcal, KJ_PER_KCAL } from "@/lib/rating";
 import { pricePer100gProtein, pricePerKg } from "@/lib/pricing";
 
 type SortKey =
   | "relevance"
   | "protein-density"
+  | "lowest-kcal"
   | "cheapest-per-100g-protein"
   | "cheapest-per-kg";
 
 const SORT_LABELS: Record<SortKey, string> = {
   "relevance": "Relevance",
   "protein-density": "Most protein per kcal",
+  "lowest-kcal": "Lowest calories",
   "cheapest-per-100g-protein": "Cheapest protein",
   "cheapest-per-kg": "Cheapest per kg",
 };
@@ -38,6 +40,10 @@ function scoreFor(p: WooliesProduct, key: SortKey): number | null {
     case "protein-density": {
       const d = p.nutrition ? computeProteinPer100kcal(p.nutrition) : null;
       return d && Number.isFinite(d.value) ? d.value : null;
+    }
+    case "lowest-kcal": {
+      const kj = p.nutrition?.energyKjPer100g;
+      return kj != null && kj > 0 ? kj / KJ_PER_KCAL : null;
     }
     case "cheapest-per-100g-protein":
       return pricePer100gProtein(p);
@@ -102,7 +108,7 @@ export default function Home() {
             <span className="text-green-700">Grocer</span>
           </h1>
           <p className="hidden sm:block text-sm text-gray-500">
-            The cheapest protein at Woolworths, ranked by what it costs.
+            Find the highest-protein groceries at Woolworths.
           </p>
         </div>
       </header>

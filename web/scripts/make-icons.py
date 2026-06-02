@@ -82,7 +82,7 @@ def make_og_image(img: Image.Image, size=(1200, 630)) -> Image.Image:
     gains_w = draw.textlength("Gains ", font=title_font)
     draw.text((text_x, text_y), "Gains", fill=(28, 28, 28), font=title_font)
     draw.text((text_x + gains_w, text_y), "Grocer", fill=DARK_GREEN, font=title_font)
-    draw.text((text_x, text_y + 140), "The cheapest protein", fill=(60, 60, 60), font=tag_font)
+    draw.text((text_x, text_y + 140), "Highest-protein groceries", fill=(60, 60, 60), font=tag_font)
     draw.text((text_x, text_y + 180), "at Woolworths.", fill=(60, 60, 60), font=tag_font)
     draw.text((text_x, text_y + 250), "gainsgrocer.com", fill=GREEN, font=sub_font)
     return canvas

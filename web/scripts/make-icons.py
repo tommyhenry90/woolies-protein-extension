@@ -26,23 +26,22 @@ DARK_GREEN = (45, 95, 25)
 WHITE = (255, 255, 255)
 
 
-def remove_cream_background(img: Image.Image, threshold: int = 30) -> Image.Image:
-    """Replace the off-white background with transparent.
-    Uses ImageDraw.floodfill from each corner with a sentinel colour,
-    then maps that sentinel to alpha=0."""
+def remove_cream_background(img: Image.Image, tolerance: int = 22) -> Image.Image:
+    """Replace ALL near-cream pixels with transparent. The source artwork
+    bakes a cream rounded-square *into* the design, so flood-fill from the
+    corners isn't enough — we mask by colour distance globally."""
     img = img.convert("RGBA")
+    px = img.load()
     w, h = img.size
-    SENTINEL = (1, 254, 1)
-    for corner in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
-        r, g, b, *_ = img.getpixel(corner)
-        if abs(r - CREAM[0]) < 40 and abs(g - CREAM[1]) < 40 and abs(b - CREAM[2]) < 40:
-            ImageDraw.floodfill(img, corner, (*SENTINEL, 255), thresh=threshold)
-    pixels = img.load()
     for y in range(h):
         for x in range(w):
-            p = pixels[x, y]
-            if p[:3] == SENTINEL:
-                pixels[x, y] = (0, 0, 0, 0)
+            r, g, b, a = px[x, y]
+            if (
+                abs(r - CREAM[0]) <= tolerance
+                and abs(g - CREAM[1]) <= tolerance
+                and abs(b - CREAM[2]) <= tolerance
+            ):
+                px[x, y] = (0, 0, 0, 0)
     return img
 
 
@@ -51,19 +50,12 @@ def autocrop(img: Image.Image) -> Image.Image:
     return img.crop(bbox) if bbox else img
 
 
-def make_square_with_cream(img: Image.Image, size: int, radius_frac: float = 0.18) -> Image.Image:
-    """Composite the cropped transparent logo onto a cream rounded-square,
-    keeping ~8% padding around the artwork."""
+def make_square_transparent(img: Image.Image, size: int) -> Image.Image:
+    """Scale the cropped logo to fit a transparent square (no background).
+    Keeps the aspect ratio and centres the artwork with ~6% padding."""
     canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    mask = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        (0, 0, size - 1, size - 1), radius=int(size * radius_frac), fill=255
-    )
-    bg = Image.new("RGBA", (size, size), (*CREAM, 255))
-    canvas.paste(bg, (0, 0), mask)
-
     art = img.copy()
-    art.thumbnail((int(size * 0.84), int(size * 0.84)), Image.LANCZOS)
+    art.thumbnail((int(size * 0.92), int(size * 0.92)), Image.LANCZOS)
     ax = (size - art.width) // 2
     ay = (size - art.height) // 2
     canvas.alpha_composite(art, (ax, ay))
@@ -114,21 +106,19 @@ def main():
     source = Image.open(SRC).convert("RGBA")
     cleaned = autocrop(remove_cream_background(source))
 
-    # 1) Next favicon convention — app/icon.png (rendered at multiple sizes).
-    icon = make_square_with_cream(cleaned, 512)
-    icon.save(os.path.join(APP, "icon.png"))
+    # 1) Next favicon convention — app/icon.png, transparent background.
+    make_square_transparent(cleaned, 512).save(os.path.join(APP, "icon.png"))
 
-    # 2) Apple touch icon.
-    apple = make_square_with_cream(cleaned, 180, radius_frac=0.0)  # iOS rounds itself
-    apple.save(os.path.join(APP, "apple-icon.png"))
+    # 2) Apple touch icon — iOS auto-paints black behind transparent areas,
+    # which looks fine with the green-on-black aesthetic.
+    make_square_transparent(cleaned, 180).save(os.path.join(APP, "apple-icon.png"))
 
-    # 3) OpenGraph preview card.
-    og = make_og_image(cleaned)
-    og.save(os.path.join(APP, "opengraph-image.png"), optimize=True)
+    # 3) OpenGraph preview card (keeps the cream background — brand surface).
+    make_og_image(cleaned).save(os.path.join(APP, "opengraph-image.png"), optimize=True)
 
-    # 4) Multi-size favicon.ico for the browser tab.
+    # 4) Multi-size favicon.ico for the browser tab. Transparent.
     fav_sizes = [(16, 16), (32, 32), (48, 48), (64, 64)]
-    fav_imgs = [make_square_with_cream(cleaned, s[0], radius_frac=0.0) for s in fav_sizes]
+    fav_imgs = [make_square_transparent(cleaned, s[0]) for s in fav_sizes]
     fav_imgs[0].save(
         os.path.join(APP, "favicon.ico"),
         format="ICO",
@@ -136,10 +126,11 @@ def main():
         append_images=fav_imgs[1:],
     )
 
-    # 5) In-page assets.
+    # 5) In-page assets. Both transparent now; the older logo.png was
+    # cream-backed — replaced for consistency.
     cleaned.thumbnail((512, 512), Image.LANCZOS)
     cleaned.save(os.path.join(PUBLIC, "logo-mark.png"))
-    make_square_with_cream(cleaned, 512).save(os.path.join(PUBLIC, "logo.png"))
+    make_square_transparent(cleaned, 512).save(os.path.join(PUBLIC, "logo.png"))
 
     for p in (
         os.path.join(APP, "icon.png"),

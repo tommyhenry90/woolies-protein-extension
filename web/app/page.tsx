@@ -12,9 +12,14 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [needsAuth, setNeedsAuth] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [hasSharedSession, setHasSharedSession] = useState<boolean | null>(null);
 
   useEffect(() => {
     setConnected(hasWooliesCookie());
+    fetch("/api/woolies/status")
+      .then(r => r.json())
+      .then(j => setHasSharedSession(!!j.hasSharedSession))
+      .catch(() => setHasSharedSession(false));
   }, []);
 
   function onSubmit(e: React.FormEvent) {
@@ -70,7 +75,7 @@ export default function Home() {
         </button>
       </form>
 
-      {!connected && (
+      {!connected && hasSharedSession === false && (
         <div className="mb-6 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm">
           You haven&apos;t connected a Woolies session yet. Search needs cookies from your woolworths.com.au login.{" "}
           <Link href="/settings" className="underline font-medium">Connect now</Link>.

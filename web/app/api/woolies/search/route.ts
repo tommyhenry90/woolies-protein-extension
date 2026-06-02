@@ -46,7 +46,12 @@ export async function POST(req: Request) {
   }
 
   const term = (body.term || "").trim();
-  const cookie = body.cookie || "";
+  // Prefer the user-supplied cookie (their own Woolies session); fall back to
+  // the shared cookie set on the server (WOOLIES_COOKIE env var) so visitors
+  // can search without connecting their own account.
+  const cookie = (body.cookie && body.cookie.length > 0)
+    ? body.cookie
+    : (process.env.WOOLIES_COOKIE || "");
   if (!term) return NextResponse.json({ ok: false, error: "Missing term" }, { status: 400 });
   if (!cookie) return NextResponse.json({ ok: false, error: "No Woolies session", needsAuth: true }, { status: 401 });
 

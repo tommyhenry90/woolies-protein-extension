@@ -12,7 +12,11 @@
   },
   "observability": {
     "enabled": true
-  }
+  },
+  "routes": [
+    { "pattern": "gainsgrocer.com", "custom_domain": true },
+    { "pattern": "www.gainsgrocer.com", "custom_domain": true }
+  ]
   // After deploy, set the shared session cookie (and rotate every few days):
   //   wrangler secret put WOOLIES_COOKIE
 }

@@ -104,11 +104,11 @@ export default function Home() {
       <header className="mb-8 flex items-baseline justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold flex items-baseline gap-2">
-            <span>Woolies Protein</span>
-            <span className="text-green-700">Tags</span>
+            <span>Gains</span>
+            <span className="text-green-700">Grocer</span>
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Search Woolworths with a protein-density rating on every result.
+            The cheapest protein at Woolworths, ranked by what it costs.
           </p>
         </div>
         <Link href="/settings" className="text-sm text-gray-600 hover:text-gray-900 underline">
@@ -147,8 +147,9 @@ export default function Home() {
 
       {!connected && hasSharedSession === false && (
         <div className="mb-6 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm">
-          You haven&apos;t connected a Woolies session yet. Search needs cookies from your woolworths.com.au login.{" "}
-          <Link href="/settings" className="underline font-medium">Connect now</Link>.
+          Couldn&apos;t reach Woolworths anonymously — your search may need a
+          personal session.{" "}
+          <Link href="/settings" className="underline font-medium">Connect one</Link>.
         </div>
       )}
 
@@ -194,7 +195,7 @@ export default function Home() {
 
       {!sortedProducts && !pending && !needsAuth && !error && (
         <div className="text-center text-gray-400 py-16 text-sm">
-          Type a query above to search Woolworths.
+          Try <em>chicken breast</em>, <em>greek yoghurt</em>, <em>tuna</em>, <em>protein bar</em>…
         </div>
       )}
     </main>

@@ -29,7 +29,8 @@ export default function SettingsPage() {
       <header>
         <h1 className="text-2xl font-semibold">Settings</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Connect a Woolworths session so the app can search on your behalf.
+          Optional — connect your own Woolworths session for personalised
+          pricing and stock. Most searches work without it.
         </p>
       </header>
 
@@ -38,7 +39,7 @@ export default function SettingsPage() {
         <p className="text-sm text-gray-600">
           Drag this link to your bookmarks bar. Then visit{" "}
           <a className="underline" href="https://www.woolworths.com.au" target="_blank" rel="noreferrer">woolworths.com.au</a>,
-          sign in if needed, and click the bookmarklet — it sends your cookies here.
+          sign in if needed, and click the bookmarklet — it forwards your cookies to Gains Grocer.
         </p>
         <a
           href={bookmarklet}
@@ -46,7 +47,7 @@ export default function SettingsPage() {
           className="inline-block px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700"
           draggable
         >
-          Connect Woolies → {origin || "this app"}
+          Connect Woolies → Gains Grocer
         </a>
       </section>
 

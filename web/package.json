@@ -8,6 +8,7 @@
     "start": "next start",
     "preview": "next build && opennextjs-cloudflare build --skipNextBuild && opennextjs-cloudflare preview",
     "deploy": "next build && opennextjs-cloudflare build --skipNextBuild && opennextjs-cloudflare deploy",
+    "build:cf": "next build && opennextjs-cloudflare build --skipNextBuild",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts"
   },
   "dependencies": {

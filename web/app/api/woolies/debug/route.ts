@@ -2,7 +2,6 @@
 import { NextResponse } from "next/server";
 import { getAnonymousWooliesCookies, invalidateAnonymousCookies } from "@/lib/anon-cookies";
 
-export const runtime = "edge";
 
 export async function GET(req: Request) {
   if (new URL(req.url).searchParams.has("refresh")) invalidateAnonymousCookies();

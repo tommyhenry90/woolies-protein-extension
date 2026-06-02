@@ -5,8 +5,6 @@
 
 import { NextResponse } from "next/server";
 
-export const runtime = "edge";
-export const preferredRegion = "syd1";
 
 const SUGGEST_URL = "https://www.woolworths.com.au/apis/ui/search-suggestions/suggestionsb2c";
 

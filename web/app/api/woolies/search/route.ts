@@ -8,8 +8,6 @@ import { NextResponse } from "next/server";
 import { extractNutrition, type Nutrition } from "@/lib/rating";
 import { getAnonymousWooliesCookies, invalidateAnonymousCookies } from "@/lib/anon-cookies";
 
-export const runtime = "edge";
-export const preferredRegion = "syd1";
 
 const WOOLIES_SEARCH = "https://www.woolworths.com.au/apis/ui/Search/products";
 

@@ -98,17 +98,21 @@ export default function Home() {
   function switchStore(next: Store) {
     if (next === store) return;
     setStore(next);
-    // Clear results when switching stores so the user doesn't see stale items.
     setProducts(null);
-    setSubmittedTerm("");
     setError(null);
     setLoadingMore(false);
     searchIdRef.current++;
+    // If there's an existing query, re-run it against the new store so
+    // the user sees apples-to-apples results without retyping.
+    if (submittedTerm) searchIn(next, submittedTerm);
   }
 
-  async function search(term: string) {
+  function search(term: string) {
+    searchIn(store, term);
+  }
+
+  async function searchIn(myStore: Store, term: string) {
     const myId = ++searchIdRef.current;
-    const myStore = store;
     setSubmittedTerm(term);
     setProducts(null);
     setTotalCount(0);
@@ -122,7 +126,7 @@ export default function Home() {
 
     if (!first.ok) {
       setLoading(false);
-      setError(first.error || (first.blocked ? `Blocked by ${theme.storeLabel}.` : "Search failed."));
+      setError(first.error || (first.blocked ? `Blocked by ${THEME[myStore].storeLabel}.` : "Search failed."));
       setProducts([]);
       return;
     }
@@ -223,7 +227,6 @@ export default function Home() {
 
       <div className="mb-4">
         <SearchBox
-          key={store}
           pending={loading}
           onSubmit={(t) => search(t)}
           accentClass={`${theme.btnBg} ${theme.btnHover}`}

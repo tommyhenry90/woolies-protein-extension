@@ -37,12 +37,14 @@ function colesProductUrl(p: ColesSearchProduct): string {
   return `https://www.coles.com.au/product/${colesSlug(p)}`;
 }
 
-function colesImageUrl(p: ColesSearchProduct): string | null {
+function colesImageUrl(p: ColesSearchProduct, assetsBase: string): string | null {
   const uri = p.imageUris?.[0]?.uri;
   if (!uri) return null;
   if (uri.startsWith("http")) return uri;
-  return `https://productimages.coles.com.au${uri}`;
+  return `${assetsBase}${uri}`;
 }
+
+const DEFAULT_ASSETS_URL = "https://cdn.productimages.coles.com.au/productimages";
 
 async function fetchSearch(buildId: string, term: string, page: number): Promise<Response> {
   // Coles' Next.js page reads `q` from the query string. We pass `page` too;
@@ -91,6 +93,7 @@ export async function POST(req: Request) {
 
   const data = await res.json() as {
     pageProps?: {
+      assetsUrl?: string;
       searchResults?: {
         noOfResults?: number;
         start?: number;
@@ -100,6 +103,7 @@ export async function POST(req: Request) {
     };
   };
 
+  const assetsBase = data.pageProps?.assetsUrl || DEFAULT_ASSETS_URL;
   const sr = data.pageProps?.searchResults;
   const rawProducts = sr?.results ?? [];
   const pageSize = sr?.pageSize ?? 48;
@@ -115,7 +119,7 @@ export async function POST(req: Request) {
       packageSize: p.size ?? null,
       price: p.pricing?.now ?? null,
       cupString: p.pricing?.comparable ?? null,
-      imageUrl: colesImageUrl(p),
+      imageUrl: colesImageUrl(p, assetsBase),
       productUrl: colesProductUrl(p),
       // Store the slug so /api/coles/product can fetch nutrition without
       // having to guess it from id alone.

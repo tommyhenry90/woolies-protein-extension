@@ -12,7 +12,13 @@ export type WooliesProduct = {
   imageUrl: string | null;
   productUrl: string;
   nutrition: Nutrition | null;
+  // Coles results carry a slug for the per-product nutrition lookup.
+  // Woolies populates `nutrition` directly so this stays undefined.
+  slug?: string;
 };
+
+// Alias for cross-store generic usage.
+export type Product = WooliesProduct;
 
 export type SearchReply = {
   ok: boolean;

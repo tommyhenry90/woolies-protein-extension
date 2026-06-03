@@ -7,9 +7,17 @@ type Props = {
   initialValue?: string;
   pending?: boolean;
   onSubmit: (term: string) => void;
+  accentClass?: string;             // e.g. "bg-green-600 hover:bg-green-700"
+  suggestStore?: "woolies" | "coles";
 };
 
-export function SearchBox({ initialValue = "", pending = false, onSubmit }: Props) {
+export function SearchBox({
+  initialValue = "",
+  pending = false,
+  onSubmit,
+  accentClass = "bg-green-600 hover:bg-green-700",
+  suggestStore = "woolies",
+}: Props) {
   const [term, setTerm] = useState(initialValue);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
@@ -17,8 +25,13 @@ export function SearchBox({ initialValue = "", pending = false, onSubmit }: Prop
   const ctrlRef = useRef<AbortController | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  // Debounced suggestion fetch.
+  // Debounced suggestion fetch. Coles doesn't expose a public suggest
+  // endpoint we've wired, so we only show suggestions for Woolies.
   useEffect(() => {
+    if (suggestStore !== "woolies") {
+      setSuggestions([]);
+      return;
+    }
     const q = term.trim();
     if (q.length < 2) {
       setSuggestions([]);
@@ -35,9 +48,8 @@ export function SearchBox({ initialValue = "", pending = false, onSubmit }: Prop
       }
     }, 150);
     return () => { clearTimeout(t); ctrl.abort(); };
-  }, [term]);
+  }, [term, suggestStore]);
 
-  // Close on outside click.
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
@@ -75,6 +87,8 @@ export function SearchBox({ initialValue = "", pending = false, onSubmit }: Prop
     }
   }
 
+  const ringClass = suggestStore === "coles" ? "focus:ring-red-600" : "focus:ring-green-600";
+
   return (
     <div className="relative flex gap-2" ref={wrapRef}>
       <div className="relative flex-1">
@@ -87,7 +101,7 @@ export function SearchBox({ initialValue = "", pending = false, onSubmit }: Prop
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
           placeholder="Search for chicken breast, greek yoghurt, oats…"
-          className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-green-600"
+          className={`w-full px-4 py-3 border border-gray-300 rounded-lg text-base focus:outline-none focus:ring-2 ${ringClass}`}
         />
         {open && suggestions.length > 0 && (
           <ul className="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
@@ -98,7 +112,7 @@ export function SearchBox({ initialValue = "", pending = false, onSubmit }: Prop
                 onMouseEnter={() => setHighlight(i)}
                 className={
                   "px-4 py-2 text-sm cursor-pointer " +
-                  (i === highlight ? "bg-green-50 text-green-900" : "hover:bg-gray-50")
+                  (i === highlight ? "bg-gray-100" : "hover:bg-gray-50")
                 }
               >
                 {s}
@@ -111,7 +125,7 @@ export function SearchBox({ initialValue = "", pending = false, onSubmit }: Prop
         type="button"
         onClick={() => term.trim() && submit(term.trim())}
         disabled={pending || !term.trim()}
-        className="px-6 py-3 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+        className={`px-6 py-3 rounded-lg text-white font-medium disabled:bg-gray-300 disabled:cursor-not-allowed ${accentClass}`}
       >
         {pending ? "Searching…" : "Search"}
       </button>

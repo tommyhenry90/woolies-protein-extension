@@ -2,11 +2,14 @@
 
 import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { wooliesSearch, type WooliesProduct } from "@/lib/woolies";
+import { wooliesSearch, type Product } from "@/lib/woolies";
+import { colesSearch, colesNutrition } from "@/lib/coles";
 import { ProductCard } from "@/components/ProductCard";
 import { SearchBox } from "@/components/SearchBox";
 import { computeProteinPer100kcal, KJ_PER_KCAL } from "@/lib/rating";
 import { pricePer100gProtein, pricePerKg } from "@/lib/pricing";
+
+type Store = "woolies" | "coles";
 
 type SortKey =
   | "relevance"
@@ -23,13 +26,11 @@ const SORT_LABELS: Record<SortKey, string> = {
   "cheapest-per-kg": "Cheapest per kg",
 };
 
-// Hard cap on background-loaded pages. 6 × 36 = 216 products is plenty
-// for a sort to surface the genuine winners; further pages are usually
-// tail relevance and not worth the round-trips.
 const MAX_PAGES = 6;
 const CONCURRENCY = 3;
+const COLES_NUTRITION_CONCURRENCY = 6;
 
-function sortProducts(products: WooliesProduct[], key: SortKey): WooliesProduct[] {
+function sortProducts(products: Product[], key: SortKey): Product[] {
   if (key === "relevance") return products;
   const tagged = products.map((p, i) => ({ p, i, v: scoreFor(p, key) }));
   tagged.sort((a, b) => {
@@ -41,7 +42,7 @@ function sortProducts(products: WooliesProduct[], key: SortKey): WooliesProduct[
   return tagged.map((t) => t.p);
 }
 
-function scoreFor(p: WooliesProduct, key: SortKey): number | null {
+function scoreFor(p: Product, key: SortKey): number | null {
   switch (key) {
     case "protein-density": {
       const d = p.nutrition ? computeProteinPer100kcal(p.nutrition) : null;
@@ -60,26 +61,54 @@ function scoreFor(p: WooliesProduct, key: SortKey): number | null {
   }
 }
 
+const THEME = {
+  woolies: {
+    accentText: "text-green-700",
+    btnBg: "bg-green-600",
+    btnHover: "hover:bg-green-700",
+    chipActive: "bg-gray-900 text-white border-gray-900",
+    storeLabel: "Woolworths",
+  },
+  coles: {
+    accentText: "text-red-700",
+    btnBg: "bg-red-600",
+    btnHover: "hover:bg-red-700",
+    chipActive: "bg-gray-900 text-white border-gray-900",
+    storeLabel: "Coles",
+  },
+} as const;
+
 export default function Home() {
+  const [store, setStore] = useState<Store>("woolies");
   const [submittedTerm, setSubmittedTerm] = useState("");
-  const [products, setProducts] = useState<WooliesProduct[] | null>(null);
+  const [products, setProducts] = useState<Product[] | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("protein-density");
-
-  // Bumped per search; in-flight handlers compare against the ref and bail
-  // out if the user has typed a new query in the meantime.
   const searchIdRef = useRef(0);
 
+  const theme = THEME[store];
   const sortedProducts = useMemo(
     () => (products ? sortProducts(products, sort) : null),
     [products, sort],
   );
 
+  function switchStore(next: Store) {
+    if (next === store) return;
+    setStore(next);
+    // Clear results when switching stores so the user doesn't see stale items.
+    setProducts(null);
+    setSubmittedTerm("");
+    setError(null);
+    setLoadingMore(false);
+    searchIdRef.current++;
+  }
+
   async function search(term: string) {
     const myId = ++searchIdRef.current;
+    const myStore = store;
     setSubmittedTerm(term);
     setProducts(null);
     setTotalCount(0);
@@ -87,12 +116,13 @@ export default function Home() {
     setLoadingMore(false);
     setLoading(true);
 
-    const first = await wooliesSearch(term, 1);
-    if (searchIdRef.current !== myId) return; // user moved on
+    const doSearch = myStore === "woolies" ? wooliesSearch : colesSearch;
+    const first = await doSearch(term, 1);
+    if (searchIdRef.current !== myId) return;
 
     if (!first.ok) {
       setLoading(false);
-      setError(first.error || (first.blocked ? "Blocked by Woolworths." : "Search failed."));
+      setError(first.error || (first.blocked ? `Blocked by ${theme.storeLabel}.` : "Search failed."));
       setProducts([]);
       return;
     }
@@ -100,29 +130,52 @@ export default function Home() {
     setTotalCount(first.totalCount ?? first.products.length);
     setLoading(false);
 
-    const pageSize = first.pageSize ?? 36;
+    // Coles search has no nutrition — kick off lazy per-product detail fetches.
+    if (myStore === "coles") {
+      hydrateColesNutrition(first.products, myId);
+    }
+
+    // Background-load further search pages.
+    const pageSize = first.pageSize ?? (myStore === "coles" ? 48 : 36);
     const total = first.totalCount ?? 0;
     const allPages = Math.ceil(total / pageSize);
     const wantedPages = Math.min(allPages, MAX_PAGES);
     if (wantedPages <= 1) return;
 
-    // Background-load pages 2..wantedPages so the full sort works.
     setLoadingMore(true);
     const remaining = Array.from({ length: wantedPages - 1 }, (_, i) => i + 2);
     for (let i = 0; i < remaining.length; i += CONCURRENCY) {
       const batch = remaining.slice(i, i + CONCURRENCY);
-      const replies = await Promise.all(batch.map((p) => wooliesSearch(term, p)));
+      const replies = await Promise.all(batch.map((p) => doSearch(term, p)));
       if (searchIdRef.current !== myId) return;
       const newOnes = replies.flatMap((r) => (r.ok ? r.products : []));
       if (newOnes.length) {
         setProducts((prev) => mergeUnique(prev || [], newOnes));
+        if (myStore === "coles") hydrateColesNutrition(newOnes, myId);
       }
     }
     if (searchIdRef.current === myId) setLoadingMore(false);
   }
 
+  async function hydrateColesNutrition(items: Product[], myId: number) {
+    // Fetch nutrition for each item, in batches of COLES_NUTRITION_CONCURRENCY.
+    const withSlugs = items.filter((p) => p.slug);
+    for (let i = 0; i < withSlugs.length; i += COLES_NUTRITION_CONCURRENCY) {
+      const batch = withSlugs.slice(i, i + COLES_NUTRITION_CONCURRENCY);
+      const results = await Promise.all(
+        batch.map(async (p) => ({ stockcode: p.stockcode, nutrition: await colesNutrition(p.slug!) })),
+      );
+      if (searchIdRef.current !== myId) return;
+      setProducts((prev) => {
+        if (!prev) return prev;
+        const map = new Map(results.map((r) => [String(r.stockcode), r.nutrition]));
+        return prev.map((p) => (map.has(String(p.stockcode)) ? { ...p, nutrition: map.get(String(p.stockcode)) ?? null } : p));
+      });
+    }
+  }
+
   const loadedCount = sortedProducts?.length ?? 0;
-  const cap = Math.min(totalCount, MAX_PAGES * 36);
+  const cap = Math.min(totalCount, MAX_PAGES * (store === "coles" ? 48 : 36));
   const remainingToLoad = Math.max(0, cap - loadedCount);
 
   return (
@@ -139,16 +192,43 @@ export default function Home() {
         <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl font-bold leading-tight flex items-baseline gap-1.5">
             <span>Gains</span>
-            <span className="text-green-700">Grocer</span>
+            <span className={theme.accentText}>Grocer</span>
           </h1>
           <p className="hidden sm:block text-sm text-gray-500">
-            Find the highest-protein groceries at Woolworths.
+            Find the highest-protein groceries at {theme.storeLabel}.
           </p>
         </div>
       </header>
 
+      <div className="mb-3 inline-flex p-1 bg-gray-100 rounded-lg text-sm font-medium">
+        {(["woolies", "coles"] as Store[]).map((s) => {
+          const t = THEME[s];
+          const active = s === store;
+          return (
+            <button
+              key={s}
+              onClick={() => switchStore(s)}
+              className={
+                "px-4 py-1.5 rounded-md transition-colors " +
+                (active
+                  ? `bg-white shadow-sm ${t.accentText}`
+                  : "text-gray-600 hover:text-gray-900")
+              }
+            >
+              {t.storeLabel}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="mb-4">
-        <SearchBox pending={loading} onSubmit={(t) => search(t)} />
+        <SearchBox
+          key={store}
+          pending={loading}
+          onSubmit={(t) => search(t)}
+          accentClass={`${theme.btnBg} ${theme.btnHover}`}
+          suggestStore={store}
+        />
       </div>
 
       {sortedProducts && sortedProducts.length > 0 && (
@@ -161,7 +241,7 @@ export default function Home() {
               className={
                 "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors " +
                 (sort === k
-                  ? "bg-gray-900 text-white border-gray-900"
+                  ? theme.chipActive
                   : "bg-white text-gray-700 border-gray-300 hover:border-gray-400")
               }
             >
@@ -171,7 +251,7 @@ export default function Home() {
           {totalCount > 0 && (
             <span className="ml-auto text-xs text-gray-500 flex items-center gap-1.5">
               {loadingMore && (
-                <span className="inline-block h-2 w-2 rounded-full bg-green-600 animate-pulse" />
+                <span className={`inline-block h-2 w-2 rounded-full animate-pulse ${store === "coles" ? "bg-red-600" : "bg-green-600"}`} />
               )}
               {loadingMore
                 ? `Loading ${remainingToLoad} more…`
@@ -190,7 +270,7 @@ export default function Home() {
       {sortedProducts && sortedProducts.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {sortedProducts.map((p) => (
-            <ProductCard key={String(p.stockcode)} product={p} />
+            <ProductCard key={String(p.stockcode)} product={p} accentClass={`${theme.btnBg} ${theme.btnHover}`} viewLabel={`View on ${theme.storeLabel} →`} />
           ))}
         </div>
       )}
@@ -210,7 +290,7 @@ export default function Home() {
   );
 }
 
-function mergeUnique(existing: WooliesProduct[], incoming: WooliesProduct[]): WooliesProduct[] {
+function mergeUnique(existing: Product[], incoming: Product[]): Product[] {
   const seen = new Set(existing.map((p) => String(p.stockcode)));
   const merged = [...existing];
   for (const p of incoming) {

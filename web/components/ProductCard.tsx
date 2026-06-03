@@ -1,14 +1,19 @@
 import Image from "next/image";
 import { ProteinBadge } from "./ProteinBadge";
-import type { WooliesProduct } from "@/lib/woolies";
+import type { Product } from "@/lib/woolies";
 import { formatPrice, pricePer100gProtein, pricePerKg } from "@/lib/pricing";
 
-export function ProductCard({ product }: { product: WooliesProduct }) {
+type Props = {
+  product: Product;
+  accentClass?: string;     // e.g. "bg-green-600 hover:bg-green-700"
+  viewLabel?: string;       // e.g. "View on Coles →"
+};
+
+export function ProductCard({ product, accentClass = "bg-green-600 hover:bg-green-700", viewLabel = "View on Woolies →" }: Props) {
   const perKg = pricePerKg(product);
   const per100gP = pricePer100gProtein(product);
   return (
     <article className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow flex flex-row sm:flex-col">
-      {/* Image — square thumbnail on mobile, hero on larger screens */}
       <a
         href={product.productUrl}
         target="_blank"
@@ -31,7 +36,6 @@ export function ProductCard({ product }: { product: WooliesProduct }) {
         </div>
       </a>
 
-      {/* Body */}
       <div className="flex-1 flex flex-col min-w-0">
         <div className="px-3 pt-3 pb-2">
           <ProteinBadge nutrition={product.nutrition} />
@@ -42,7 +46,7 @@ export function ProductCard({ product }: { product: WooliesProduct }) {
           rel="noreferrer"
           className="px-3 flex-1 block group"
         >
-          <div className="text-sm font-medium text-gray-900 line-clamp-2 group-hover:text-green-700">
+          <div className="text-sm font-medium text-gray-900 line-clamp-2 group-hover:underline">
             {product.displayName}
           </div>
           {product.price != null && (
@@ -73,9 +77,9 @@ export function ProductCard({ product }: { product: WooliesProduct }) {
             href={product.productUrl}
             target="_blank"
             rel="noreferrer"
-            className="block w-full text-center px-3 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700"
+            className={`block w-full text-center px-3 py-2 rounded-md text-white text-sm font-medium ${accentClass}`}
           >
-            View on Woolies →
+            {viewLabel}
           </a>
         </div>
       </div>

@@ -47,24 +47,17 @@ export async function POST(req: Request) {
   const term = (body.term || "").trim();
   if (!term) return NextResponse.json({ ok: false, error: "Missing term" }, { status: 400 });
 
-  // Cookie priority:
+  // Cookie sources, tried in order until one isn't blocked:
   //   1. User-supplied (bookmarklet) — their personalised session
   //   2. WOOLIES_COOKIE env var       — preconfigured shared session (optional)
   //   3. Anonymous Akamai cookies harvested from a homepage GET — works for everyone
-  let cookie = "";
-  let cookieSource: "user" | "env" | "anon" = "anon";
-  if (body.cookie && body.cookie.length > 0) {
-    cookie = body.cookie;
-    cookieSource = "user";
-  } else if (process.env.WOOLIES_COOKIE && process.env.WOOLIES_COOKIE.length > 0) {
-    cookie = process.env.WOOLIES_COOKIE;
-    cookieSource = "env";
-  } else {
-    cookie = await getAnonymousWooliesCookies();
-  }
-  if (!cookie) {
-    return NextResponse.json({ ok: false, error: "Couldn't establish a Woolies session", needsAuth: true }, { status: 502 });
-  }
+  // The env cookie goes stale after a few days, so a block on 1 or 2 must
+  // fall through to 3 rather than failing every search.
+  type CookieSource = "user" | "env" | "anon";
+  const sources: CookieSource[] = [];
+  if (body.cookie && body.cookie.length > 0) sources.push("user");
+  if (process.env.WOOLIES_COOKIE && process.env.WOOLIES_COOKIE.length > 0) sources.push("env");
+  sources.push("anon");
 
   const pageNumber = Math.max(1, Math.floor(body.page ?? 1));
   // Woolies caps PageSize at 36 and returns HTTP 400 otherwise.
@@ -101,6 +94,10 @@ export async function POST(req: Request) {
           "Content-Type": "application/json",
           Origin: "https://www.woolworths.com.au",
           Referer: "https://www.woolworths.com.au/shop/search/products?searchTerm=" + encodeURIComponent(term),
+          "Accept-Language": "en-AU,en;q=0.9",
+          "Sec-Fetch-Dest": "empty",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Site": "same-origin",
           "User-Agent": ua,
           Cookie: cookieValue,
         },
@@ -112,15 +109,32 @@ export async function POST(req: Request) {
   }
 
   try {
-    let res = await callWoolies(cookie);
+    let res: Response | null = null;
+    let cookieSource: CookieSource = "anon";
+    const tried: string[] = [];
+    for (const source of sources) {
+      const cookie = source === "user" ? body.cookie!
+        : source === "env" ? process.env.WOOLIES_COOKIE!
+        : await getAnonymousWooliesCookies();
+      if (!cookie) { tried.push(`${source}:none`); continue; }
+      cookieSource = source;
+      res = await callWoolies(cookie);
+      tried.push(`${source}:${res.status}`);
 
-    // If Akamai dropped us on the first try AND we were using anon cookies,
-    // re-harvest the homepage once and retry. Stale anon cookies are the
-    // most common cause of a 403 here.
-    if (!res.ok && cookieSource === "anon" && (res.status === 403 || res.status === 401)) {
-      invalidateAnonymousCookies();
-      const fresh = await getAnonymousWooliesCookies();
-      if (fresh) res = await callWoolies(fresh);
+      // Stale anon cookies are the most common cause of a 403 — re-harvest
+      // the homepage once and retry.
+      if (!res.ok && source === "anon" && (res.status === 403 || res.status === 401)) {
+        invalidateAnonymousCookies();
+        const fresh = await getAnonymousWooliesCookies();
+        if (fresh) {
+          res = await callWoolies(fresh);
+          tried.push(`anon-fresh:${res.status}`);
+        }
+      }
+      if (res.ok || (res.status !== 403 && res.status !== 401)) break;
+    }
+    if (!res) {
+      return NextResponse.json({ ok: false, error: "Couldn't establish a Woolies session", tried, products: [] }, { status: 502 });
     }
 
     const contentType = res.headers.get("content-type") || "";
@@ -133,6 +147,7 @@ export async function POST(req: Request) {
         status: res.status,
         blocked,
         error: blocked ? "Blocked by Woolworths (Akamai)" : `HTTP ${res.status}`,
+        tried,
         products: [],
       }, { status: res.status });
     }

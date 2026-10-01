@@ -68,7 +68,6 @@ const THEME = {
     btnHover: "hover:bg-green-700",
     chipActive: "bg-gray-900 text-white border-gray-900",
     storeLabel: "Woolworths",
-    searchUrl: (q: string) => `https://www.woolworths.com.au/shop/search/products?searchTerm=${encodeURIComponent(q)}`,
   },
   coles: {
     accentText: "text-red-700",
@@ -76,7 +75,6 @@ const THEME = {
     btnHover: "hover:bg-red-700",
     chipActive: "bg-gray-900 text-white border-gray-900",
     storeLabel: "Coles",
-    searchUrl: (q: string) => `https://www.coles.com.au/search/products?q=${encodeURIComponent(q)}`,
   },
 } as const;
 
@@ -269,16 +267,6 @@ export default function Home() {
       {error && (
         <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-900 text-sm">
           {error}
-          {submittedTerm && (
-            <a
-              href={theme.searchUrl(submittedTerm)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block mt-2 underline font-medium"
-            >
-              Search &ldquo;{submittedTerm}&rdquo; on {theme.storeLabel} instead →
-            </a>
-          )}
         </div>
       )}
 
